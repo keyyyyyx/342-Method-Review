@@ -1,0 +1,684 @@
+---
+title: "Final Paper"
+author: "Chris Chen, Peter Liu, Yuchen Sun, Yueqi Xu"
+date: "5/31/2021"
+header-includes:
+   - \usepackage{subfig}
+   - \usepackage{setspace}\doublespacing
+output: 
+  bookdown::pdf_document2: 
+    number_sections: false
+    extra_dependencies: "subfig"
+    keep_tex: yes
+    toc: false
+fontsize: 12pt
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits = 4)
+library(rootSolve)
+library(dplyr)
+library(ggplot2)
+library(fastR2)
+library(tidyverse)
+library(LearnBayes)
+library(HDInterval)
+library(mosaic)
+```
+
+
+# Abstract
+
+# Keywords
+
+# Introduction
+
+Coronavirus disease 2019 (Covid 2019), a contagious disease caused by severe acute respiratory syndrome coronavirus 2 (SARS-CoV-2), continues to rage in a worldwide pandemic. A return to normality has increasingly come to rely on the research and development of safe and effective vaccines, especially in countries or regions that have been unable or unwilling to institute strong public health measures. 
+
+In 2020, BioNTech and Pfizer conducted an multinational, placebo-controlled, observer-blinded, pivotal efficacy trail, which randomly assigned persons 16 years of age or older in a 1:1 ratio to receive two doses, 21 days apart, of either placebo or the BNT162b2 vaccine candidate\footnote{A lipid nanoparticle–formulated, nucleoside-modified RNA 
+vaccine that encodes a prefusion stabilized, membrane-anchored SARS-CoV-2 fulllength spike protein.}. In the efficacy analysis at the first primary endpoint, among 36523 participants who had no evidence of existing or prior SARS-CoV-2 infection, 8 cases of laboratory-confirmed Covid-19 with onset at least 7 days after the second dose were observed among vaccine recipients and 162 among placebo recipients.
+
+A Bayesian beta-binomial model with a minimally informative prior is used for primary efficacy endpoint. Polack at el. proposed a beta prior with shape parameters $(0.700102, 1)$ for $\theta = (1 - \psi) /(2 - \psi)$, where $\psi$ is the vaccine efficacy (VE). The prior is centered at $\theta = 0.4118$, corresponding to VE = 30\%, which can be considered pessimistic. Their result shows BNT162b2 was 95\% effective in preventing Covid-19, with a 95\% Credible interval of $[90.3, 97.6]$.
+
+We will make two contributions in this work. First, we will critically examine the quality of the proposed prior in Polack at el. by comparison with different choices of minimally informative or non-informative priors. Then, dual to Bayesian approaches, we will further analysis the efficacy using frequestist approaches, i.e. LRT, Clopper–Pearson method, etc. In later discussion, (TBD)
+
+The paper is structured as follows. 
+
+# Statistical Methods
+
+Let $X$ denote the number of infections in the BNT162b2 group and $Y$ in the placebo. Then a reasonable model is 
+$$X \sim Binom(n_1=17,411, \pi_1)$$ 
+independently of 
+$$Y \sim Binom(n_2=17,511, \pi_2),$$ 
+and the efficacy 
+$$\psi = 1 - \frac{\pi_1}{\pi_2}$$ 
+is our parameter of interest. Let $W = X|X+Y=n$. Since the sample sizes in each group are large and the event rates are small, a Poisson approximation to a binomial can make sense here. In other words, if we think of $X$ and $Y$ as approximately Poisson with parameters $n_1\pi_1$ and $n_2\pi_2$ respectively, deriving the formula (see equation \ref{eq:w}), it then follows 
+$$W \sim Binom(n, \theta = \frac{n_1\pi_1}{n_1\pi_1+n_2\pi_2}).$$ 
+Since $n_1 \approx n_2$ due to 1:1 randomization, we approximately have  
+\begin{equation}
+  \theta = \frac{\pi_1}{\pi_1 + \pi_2} = \frac{\pi_1/\pi_2}{(\pi_1 + \pi_2)/\pi_2} = \frac{1 - \psi}{1 - \psi + 1} = \frac{1 - \psi}{2 - \psi}, \label{eq:theta-psi}
+\end{equation}
+and 
+\begin{equation}
+  \psi = \frac{1-2\theta}{1-\theta}. \label{eq:psi-theta}
+\end{equation}
+Below are three different approaches we will use to analyze the data.
+
+## Bayesian Inference
+
+### Uninformative Prior
+
+```{r}
+x <- 8
+n <- 170
+
+# Flat Prior
+a1 <- 1
+b1 <- 1
+
+tophi <- function(theta) {
+  (1 - 2 * theta) / (1 - theta)
+}
+totheta <- function(phi) {
+  (1 - phi) / (2 - phi)
+}
+
+post_a1 <- x + a1
+post_b1 <- n - x + b1
+# hpdi <- hdi(qbeta, credMass = 0.95, shape1 = post_a, shape2 = post_b)
+ci1 <- c(qbeta(0.025, shape1 = post_a1, shape2 = post_b1), 
+         qbeta(0.975, shape1 = post_a1, shape2 = post_b1))
+
+low <- tophi(ci1[2])
+high <- tophi(ci1[1])
+ei <- c(low, high); ei
+```
+
+```{r}
+# Jeffery Prior
+a2 <- 0.5
+b2 <- 0.5
+
+post_a2 <- x + a2
+post_b2 <- n - x + b2
+# hpdi2 <- hdi(qbeta, credMass = 0.95, shape1 = post_a2, shape2 = post_b2)
+ci2 <- c(qbeta(0.025, shape1 = post_a2, shape2 = post_b2), 
+         qbeta(0.975, shape1 = post_a2, shape2 = post_b2))
+
+low2 <- tophi(ci2[2])
+high2 <- tophi(ci2[1])
+ei2 <- c(low2, high2); ei2
+```
+
+### 1 Subjective Bayesian
+
+```{r}
+x <- 8
+n <- 170
+
+quantile1 <- list(p = 0.5, x = 0.5)
+quantile2 <- list(p = 0.05, x = 0.4118)
+params1 <- beta.select(quantile1, quantile2)
+
+alpha1 <- params1[1]
+beta1 <- params1[2]
+
+post_alpha1 <- x + alpha1
+post_beta1 <- n - x + beta1
+# interval1 <- hdi(qbeta, credMass = 0.95, shape1 = post_alpha1, shape2 = post_beta1)
+interval1 <- c(qbeta(0.025, shape1 = post_alpha1, shape2 = post_beta1), 
+               qbeta(0.975, shape1 = post_alpha1, shape2 = post_beta1))
+
+lower1 <- tophi(interval1[2])
+upper1 <- tophi(interval1[1])
+efficacy_interval1 <- c(lower1, upper1); efficacy_interval1
+```
+
+Bayesian inference about $\theta$ can be produced using a beta-binomial model; specifically, 
+$$W \sim Binom(162 + 8, \theta)$$ 
+and 
+$$g(\theta) = Beta(\alpha, \beta)$$  
+To determine $\alpha$ and $\beta$ of the beta-prior on $\theta$, we will try three approaches. First we speculate in the following manner: 
+\begin{enumerate}
+  \item The median of efficacy is $0$. Thus $\theta$ has a median of $0.5$ 
+  \item The $95th$ percentile of efficacy is $0.3$ (a pessimistic estimate). Thus the 5th percentile of $\theta$ is 0.4118.
+\end{enumerate}
+The confidence interval we get from this approach is $[`r efficacy_interval1[1]`, `r efficacy_interval1[2]`]$.
+
+```{r}
+params2 <- c(0.700102, 1)
+alpha2 <- params2[1]
+beta2 <- params2[2]
+
+post_alpha2 <- x + alpha2
+post_beta2 <- n - x + beta2
+# interval2 <- hdi(qbeta, credMass = 0.95, shape1 = post_alpha2, shape2 = post_beta2)
+interval2 <- c(qbeta(0.025, shape1 = post_alpha2, shape2 = post_beta2), 
+               qbeta(0.975, shape1 = post_alpha2, shape2 = post_beta2))
+
+lower2 <- tophi(interval2[2])
+upper2 <- tophi(interval2[1])
+efficacy_interval2 <- c(lower2, upper2); efficacy_interval2
+```
+
+Second, we use the parameters provided by Pfizer and BioNTech: $\alpha = 0.700102$ and $\beta = 1$. This comes from the thing P&B is trying to show: the vaccine efficacy $\psi$ is greater than $0.3$. This corresponds to $\theta = 0.4118$. \
+Here's how they describe in their paper: "The prior is centered at $\theta = 0.4118$ ($\psi$ = 30%) which may be considered pessimistic". Using $\alpha = 0.700102$ and $\beta = 1$, we can indeed get $0.4118$ as the mean. Then by solving 
+$$\mu = \frac{\alpha}{\alpha + \beta},$$
+we get 
+$$\alpha = \frac{\mu}{1 - \mu} \beta.$$
+Substituting the values $\mu = 0.4118$ and $\beta = 1$, we get $\alpha = 0.700102$. The confidence interval we get from this approach is $[`r efficacy_interval2[1]`, `r efficacy_interval2[2]`]$.
+
+```{r}
+alpha3 <- 0.785158
+beta3 <- 1.121492
+
+post_alpha3 <- x + alpha3
+post_beta3 <- n - x + beta3
+# interval3 <- hdi(qbeta, credMass = 0.95, shape1 = post_alpha3, shape2 = post_beta3)
+interval3 <- c(qbeta(0.025, shape1 = post_alpha3, shape2 = post_beta3), 
+               qbeta(0.975, shape1 = post_alpha3, shape2 = post_beta3))
+
+lower3 <- tophi(interval3[2])
+upper3 <- tophi(interval3[1])
+efficacy_interval3 <- c(lower3, upper3); efficacy_interval3
+```
+
+Thirdly, we can use parameters that satisfy the condition "prior is centered at $\theta = 0.4118$", but have the variance that equals that of a flat prior (a Beta(1, 1)), which is $\frac{1}{12}$. Notice that 
+$$Var[\Theta] = \frac{\alpha\beta}{(\alpha + \beta)^2(\alpha + \beta + 1)} = \frac{\alpha}{(\alpha + \beta)} \frac{\beta}{(\alpha + \beta)} \frac{1}{(\alpha + \beta + 1)} = \mu (1-\mu) \frac{1}{(\alpha + \beta + 1)} = \frac{1}{12}.$$
+Plug in the value of $\mu = 0.4118$, we get 
+$$\alpha + \beta + 1 = \frac{\frac{1}{12}}{0.4118 \cdot (1-0.4118)} = 2.90665.$$ 
+Thus 
+$$\alpha + \beta + 1 = \beta\frac{\mu}{1-\mu} + \beta + 1 = 2.90665.$$ 
+Solve the equation, we have 
+$$1.700102\cdot\beta = 2.90665 - 1 = 1.90665 \, \Longrightarrow \, \beta = 1.121492,$$ 
+and hence $\alpha = 2.90665 - 1 - 1.121492 = 0.785158$. The confidence interval we get from this approach is $[`r efficacy_interval3[1]`, `r efficacy_interval3[2]`]$.
+
+## 2 MLE/MOM
+
+```{r, include=FALSE}
+thetahat <- 8/170
+psihat <- (1-2*thetahat)/(1-thetahat)
+```
+
+One frequentist approach to estimate the parameter $\theta$ is to use maximum likelihood estimation. In this clinical trial, $w = 8$. So, the likelihood is
+$$L(\theta ; w) = \frac{170!}{8! (170-8)!} \theta^8 (1-\theta)^{170-8}$$
+The log likelihood is
+$$l(\theta ; w) = logL(\theta; w) = log(\frac{170!}{8! (170-8)!}) + 8 log(\theta) + 162 log(1-\theta)$$
+To maximize $L(\theta; w)$, set $\frac{d}{d\theta} l(\theta) = 0$ and solve for $\theta$. Thus we have
+$$\frac{\partial l(\theta ; w) }{\partial \theta}= \frac{8}{\theta} - \frac{162}{1-\theta} = 0, \\
+8(1-\theta) - 162\theta = 0.$$
+Therefore, we have
+\begin{equation}
+	MLE \, \widehat{\theta} = `r thetahat` \label{eq:thetahat}
+\end{equation}
+Check this value is a local maximum using the second derivative test:
+\begin{equation}
+  \frac{\partial^2 l(\theta; w) }{\partial \theta^2}= -\frac{8}{\theta^2} - \frac{162}{(1-\theta)^2} < 0, \qquad \forall \theta \in \mathbb{R}. \label{eq:second-deri}
+\end{equation}
+Therefore, $MLE \, \widehat{\theta} = `r thetahat`$ is the maximum likelihood estimate, and by Equation \eqref{eq:psi-theta}, $MLE \, \widehat{\psi} = `r psihat`$. Using the estimate, we can then compute the $95\%$ confidence interval using methods such as Wald, Score, Plus-4, and Clopper-Pearson.
+
+```{r}
+wald <- confint(binom.test(x = 8, n = 170, ci.method = "Wald"))
+score <- confint(binom.test(x = 8, n = 170, ci.method = "score"))
+plus4 <- confint(binom.test(x = 8, n = 170, ci.method = "Plus4"))
+cp <- confint(binom.test(x = 8, n = 170))
+
+joint <- rbind(wald, score, plus4, cp)
+joint$method <- c("Wald", "Wilson Score", "Plus 4", "Clopper Pearson")
+joint %>% dplyr::select(method, lower, upper)
+```
+
+```{r}
+transform.confint <- function(lower.theta, upper.theta){
+      tibble(lower = (1-2*upper.theta)/(1-upper.theta), upper = (1-2*lower.theta)/(1-lower.theta))
+}
+
+wald.phi <- transform.confint(wald$lower, wald$upper)
+score.phi <- transform.confint(score$lower, score$upper)
+plus4.phi <- transform.confint(plus4$lower, plus4$upper)
+cp.phi <- transform.confint(cp$lower, cp$upper)
+phi.confint.matrix <- rbind(wald.phi, score.phi, plus4.phi, cp.phi)
+
+phi.confint.matrix$method <- c("Wald", "Wilson Score", "Plus 4", "Clopper Pearson")
+phi.confint.matrix %>% dplyr::select(method, lower, upper)
+```
+
+## 3 Likelihood Ratio
+
+```{r, include=FALSE}
+# given data
+w <- 8
+n <- 170
+n1 <- 17411
+n2 <- 17511
+
+# null hypothesis
+psi0 <- 0.3
+theta0 <- (1-psi0)/(2-psi0)
+
+# MLE
+thetahat <- w/n
+psihat <- (1-2*thetahat)/(1-thetahat)
+
+# compute log likelihood ratio
+loglikratio <- function(theta, w, nobs){
+  like_null = dbinom(w, size = nobs, prob = theta, log = T)
+  like_alt = dbinom(w, size = nobs, prob = w/nobs, log = T)
+  like_null - like_alt
+}
+
+# compute p-value
+pval <- 1-pchisq(-2*loglikratio(theta0, w, n), df=1)
+
+# empirical p-value
+set.seed(342)
+sample <- 8
+rsample <- as.matrix(rbinom(5000, 170, theta0))
+lrtstat<-function(w){
+ -2*loglikratio(theta0, w, n)
+}
+statTally(sample=sample, rdata=rsample, FUN=lrtstat, alternative="greater")
+
+conf_int <- function(theta, w, nobs){
+  q = qchisq(p=0.95, df=1)
+  -2*loglikratio(theta, w, nobs) - q
+}
+
+# compute 95% CI
+thetaCI <- uniroot.all(f = conf_int, w = 8, nobs = 170, lower = 0, upper = 1)
+psiCI <- (1-2*thetaCI)/(1-thetaCI)
+```
+
+Building on the maximum likelihood estimation approach, we have the likelihood ratio approach, which can be used to perform hypothesis testing, as well as finding confidence interval. The hypotheses concerning the paramater $\psi$ are 
+$$H_0: \psi = 0.3, \, H_1: \psi \neq 0.3.$$
+Note that from equation \eqref{eq:theta-psi}
+$$\theta = \frac{1-\psi}{2-\psi},$$
+therefore, the hypotheses based on $\theta$ are
+$$H_0: \theta = `r theta0`, \, H_1: \theta \neq `r theta0`.$$
+According to equation \eqref{eq:thetahat}, $MLE \, \widehat{\theta} = \frac{w}{n} = `r thetahat`$. The likelihood ratio is 
+$$\lambda = \frac{L(\theta_0)}{L(\widehat{\theta})} = \frac{\theta_0^w(1-\theta_0^{n-w})}{\widehat{\theta}^w(1-\widehat{\theta}^{n-w})}.$$
+From equation \eqref{eq:second-deri}, we can see that the pdf has continuous derivatives to at least the second degree, so it is smooth. And since the sample is large and the support does not depend on $\theta$, then under the null hypothesis, $$-2log(\Lambda) \stackrel{D}{\rightarrow} Chisq(df=1).$$
+Therefore, the p-value is 
+$$p(x) = P(\Lambda \leq \lambda) = P(-2ln(\Lambda)\geq -2ln(\lambda)) = P(Chisq(df=1) \geq -2ln(\lambda)) \approx `r pval`,$$
+which is a significant evidence that supports $H_1$. Computed by R (see Appendix 3), the empirical p-value is $0.0002$, which is close to the p-value based on the asymptotic chi square distribution. Therefore, the Chi-square approximation is valid, and thus we reject the hypothesis that $\theta = `r theta0`$. And in order to find the $95\%$ confidence interval for $\theta$, we need to find the interval where 
+$$-2 ln(\lambda) < qchisq(p = 0.95, df=1).$$
+See Figure \@ref(fig:Likratio) for a visualization of the interval. Therefore, computed by R (see Appendix 3), the $95\%$ confidence interval for $\theta$ is $[`r thetaCI[1]`, `r thetaCI[2]`]$, and for $\psi$ is $[`r psiCI[2]`, `r psiCI[1]`]$.
+
+# Results
+
+```{r, include=FALSE}
+#t <- seq(0, 1, 0.01)
+
+# bayes.data1 <- data.frame(
+#   theta <- t,
+#   prior <- dbeta(t, shape1 = alpha1, shape2 = beta1), 
+#   likelihood <- dbinom(8, 170, t),
+#   posterior <- dbeta(t, shape = x + alpha1, shape2 = n - x + beta1) )
+
+# ggplot(data = bayes.data1, mapping = aes(x = theta, y = prior, color = "prior")) +
+#   geom_line() + 
+#   geom_line(mapping = aes(x = theta, y = 30 * likelihood, color = "likelihood")) +
+#   geom_line(mapping = aes(x = theta, y = posterior, color = "posterior")) +
+#   scale_color_discrete(name = "Distribution") + 
+#   labs(title = 'Posterior, likelihood, and prior of the vaccine study, own belief')
+```
+
+Using the parameters provided ($\alpha = 0.700102$, $\beta = 1$) for the beta prior, we managed to approximately reproduce the results: we got $[90.4\%, 97.6\%]$ as the 95% confidence interval for efficacy $\psi$, which is very close to Pfitzer & BioNTech's result $[90.3\%, 97.6\%]$. The $95\%$ CI of $\psi$ using our own beliefs 
+\begin{enumerate}
+  \item the median of efficacy is $0$, and
+  \item the $95th$ percentile of efficacy is $0.3$,
+\end{enumerate}
+is $[66.6\%, 82.0\%]$. However, since it's a very pessimistic belief, the result is the vary far away from the P&B's result. The $95\%$ CI of $\psi$ using an alternative set of $\alpha$ and $\beta$ satisfying 
+\begin{enumerate}
+  \item the mean of $\theta = 0.4118$ and
+  \item the variance of theta is equal to that of a flat prior,
+\end{enumerate}
+is $[90.3\%, 97.6\%]$. This confidence interval is exactly the same as the P&B's confidence interval. Without using any beliefs, we used two other priors to model the distribution of $\theta$: a flat prior and a jeffery prior. The 95% CI of $\psi$ using flat prior is $[90.1\%, 97.5\%]$, and the $95\%$ CI of $\psi$ using a Jeffery prior is $[90.5\%, 97.7\%]$; both of the values are close to the P&B's result, differing to the true value about $0.1-0.2\%$.
+
+```{r prior-lik, echo=FALSE}
+t <- seq(0, 1, 0.01)
+
+priors <- data.frame(
+  theta <- t,
+  prior_1 <- dbeta(t, shape1 = alpha1, shape2 = beta1), 
+  prior_2 <- dbeta(t, shape1 = alpha2, shape2 = beta2),
+  prior_3 <- dbeta(t, shape1 = alpha3, shape2 = beta3),
+  prior_4 <- dbeta(t, shape1 = a1, shape2 = b1),
+  prior_5 <- dbeta(t, shape1 = a2, shape2 = b2),
+  likelihood <- dbinom(8, 170, t)
+)
+
+ggplot(data = priors, mapping = aes(x = theta, y = prior_1, color = "own belief")) +
+  geom_line() + 
+  geom_line(mapping = aes(x = theta, y = prior_2, color = "P&B's parameters")) +
+  geom_line(mapping = aes(x = theta, y = prior_3, color = "alternative parameters")) +
+  geom_line(mapping = aes(x = theta, y = prior_4, color = "flat prior")) +
+  geom_line(mapping = aes(x = theta, y = prior_5, color = "Jeffery prior")) +
+  geom_line(mapping = aes(x = theta, y = 30 * likelihood, color = "Likelihood")) +
+  scale_color_discrete(name = "Distributions") + 
+  labs(title = 'Prior Distributions and Likelihood of the P&B Vaccine Study') +
+  ylab('prior')
+```
+
+```{r post-lik, echo=FALSE}
+posteriors <- data.frame(
+  theta <- t,
+  post_1 <- dbeta(t, shape = x + alpha1, shape2 = n - x + beta1), 
+  post_2 <- dbeta(t, shape = x + alpha2, shape2 = n - x + beta2),
+  post_3 <- dbeta(t, shape = x + alpha3, shape2 = n - x + beta3),
+  post_4 <- dbeta(t, shape = x + a1, shape2 = n - x + b1),
+  post_5 <- dbeta(t, shape = x + a2, shape2 = n - x + b2),
+  likelihood <- dbinom(8, 170, t)
+)
+
+ggplot(data = priors, mapping = aes(x = theta, y = post_1, color = "own belief")) +
+  geom_line() + 
+  geom_line(mapping = aes(x = theta, y = post_2, color = "P&B's parameters")) +
+  geom_line(mapping = aes(x = theta, y = post_3, color = "alternative parameters")) +
+  geom_line(mapping = aes(x = theta, y = post_4, color = "flat prior")) +
+  geom_line(mapping = aes(x = theta, y = post_5, color = "Jeffery prior")) +
+  geom_line(mapping = aes(x = theta, y = 30 * likelihood, color = "Likelihood")) +
+  scale_color_discrete(name = "Distributions") + 
+  labs(title = 'Posterior Distributions and Likelihood of the P&B Vaccine Study') 
+```
+
+Other than Bayesian Inferences, we also used frequentist approaches. Using likelihood ratio, we get a $95\%$ confidence interval of $\psi$ that is $[90.6\%, 97.8\%]$, which is very close to P&B's result. Wald's $95\%$ CI of $\psi$ is $[91.4\%, 98.5\%]$, slightly higher than P&B's result. Wilson's score gives a $95\%$ CI of $\psi$ $[90.1\%, 97.5\%]$, Plus4 method gives $[89.9\%, 97.7\%]$, and Clopper Pearson's method gives $[90.0\%, 97.9\%]$, all of which are close to the P&B's $95\%$ CI of $\psi$: $[90.3\%, 97.6\%]$. This is likely due to the reason that the sample size is not very large, making Wald the worst of all and the rest behaves approximately equally good. \
+
+```{r, include=FALSE}
+approaches <- c('Double Quantile', 'Polack et al. (2020)', 'Mean&Variance (var = 1/12)', 'Flat', 'Jeffreys', 'Likelihood Ratio', 'Wald', 'Clopper Pearson', 'Single Quantile&Variance')
+lowerci <- c(0.666, 0.904, 0.903, 0.901, 0.905, 0.906, 0.914, 0.900, 0.9059)
+upperci <- c(0.820, 0.976, 0.976, 0.975, 0.977, 0.978, 0.985, 0.979, 0.9775)
+median <-  c(0.752, 0.949, 0.948, 0.947, 0.950, 0.951, 0.951, 0.951, 0.9504)
+CIs <- data.frame(
+  approaches <- approaches,
+  lower <- lowerci,
+  upper <- upperci,
+  median <- median
+)
+```
+
+```{r, include=FALSE}
+pd <- position_dodge(0.78)
+ggplot(CIs, aes(x=approaches)) +
+  geom_errorbar(data=CIs, aes(ymin=lower, ymax=upper, color=approaches), width=.1, position=pd, size = 8) + 
+  theme(axis.text.x = element_text(angle = 45)) +
+  ylim(0.62, 1) + 
+  ylab("Efficacy") +
+  ggtitle("95% Confidence Intervals for Efficacy") +
+  scale_color_brewer(palette="Set3")
+```
+
+```{r CIs, echo=FALSE}
+pd <- position_dodge(0.78)
+ggplot(CIs, aes(y=approaches)) +
+  geom_errorbar(data=CIs, aes(xmin=lower, xmax=upper, color=approaches), width=.1, position=pd, size = 8) + 
+  geom_vline(xintercept = 0.950, linetype="dashed") +
+  geom_point(data=CIs, aes(x=median), position=pd) +
+  xlim(0.62, 1) + 
+  xlab("Efficacy") +
+  ggtitle("95% Confidence/Credible Intervals for Efficacy") +
+  scale_color_brewer(palette="Set3") +
+  theme_bw() +
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"), 
+        axis.text=element_text(size=12), axis.title=element_text(size=14,face="bold"), 
+        legend.position = "none", plot.title = element_text(face="bold")) 
+```
+
+# Discussion/Conclusion
+
+# References
+
+\clearpage
+
+# Appendix 1: Figures and Tables
+
+\begin{table}[h]
+  \begin{center}
+    \begin{tabular}{ c c c }
+     Group & Cases & No. of subjects \\ \hline
+     BNT162b2 & 8 & 17,411 \\  
+     Placebo & 162 & 17,511 \\ \hline
+     Total & 170 & 34,922
+    \end{tabular}
+    \caption{Vaccine Efficacy against Covid 19 at least 7 days after second dose} \label{table:1}
+  \end{center}
+\end{table}
+
+
+```{r Likratio, fig.cap="Likelihood Ratio Confidence Interval", echo=FALSE, fig.height=3, fig.width=5}
+#par(mfrow=c(1, 2))
+
+# # PMF of W
+# x <- seq(45, 100, by=1) 
+# y <- dbinom(x, size = n, prob = theta0)
+# plot(x, y, type = 'l', xlab = 'w', ylab = 'prob')
+
+LRCI <- tibble(
+  theta = seq(0.01, 0.15, 0.001),
+  ratio = -2*loglikratio(theta, w, n)
+)
+
+ggplot(data = LRCI, mapping = aes(x=theta, y=ratio)) +
+  geom_line() + 
+  geom_abline(intercept = qchisq(p=0.95, df=1), color = 'red')
+```
+
+# Appendix 2: 
+
+1. Find distribution of $W$.  
+Since the sample sizes in each group are large and the event rates are small, a Poisson approximation to a binomial can really make sense here. In other words, if we have
+$$X \approx Poisson(n_1\pi_1); \quad Y \approx Poisson(n_2\pi_2),$$
+then 
+\begin{eqnarray*}
+  P(W=w) &=& P(X=w | X+Y = n) \\
+  &=& \frac{P(X=w \cap X+Y=n)}{P(X+Y=n)} \\
+  &=& \frac{P(X=w \cap Y=n-w)}{P(X+Y=n)} \\
+  &=& \frac{P(X=w)P(Y=n-w)}{P(X+Y=n)} \quad \text{ $X$, $Y$ independent} \\
+  &=& \frac{(e^{-n_1\pi_1}(n_1\pi_1)^w)/w! \times (e^{-n_2\pi_2}(n_2\pi_2)^{n-w})/(n-w)!}{(e^{-(n_1\pi_1 + n_2\pi_2))}(n_1\pi_1+n_2\pi_2)^n/n!} \\
+  &=& \frac{n!}{w!(n-w)!} \frac{(n_1\pi_1)^w (n_2\pi_2)^{n-w}}{(n_1\pi_1+n_2\pi_2)^n} \\
+  &=& {n \choose w} \left( \frac{n_1\pi_1}{n_1\pi_1+n_2\pi_2} \right)^w \left( \frac{n_2\pi_2}{n_1\pi_1+n_2\pi_2} \right)^{n-w} \\
+  &=& {n \choose w} \theta^w (1-\theta)^{n-w}, \quad w = 0, 1, \dots, n, \, \text{ where } \theta =  \frac{n_1\pi_1}{n_1\pi_1+n_2\pi_2}.
+\end{eqnarray*}
+Therefore, 
+\begin{equation}
+  W \sim Binom \left( n, \theta = \frac{n_1\pi_1}{n_1\pi_1+n_2\pi_2} \right). \label{eq:w}
+\end{equation}
+
+
+# Appendix 3: Codes
+
+\textbf{3.1 Compute Empirical p-value}
+
+\singlespacing
+```{r, fig.show='hide'}
+# empirical p-value
+set.seed(342)
+sample <- 8
+rsample <- as.matrix(rbinom(5000, 170, theta0))
+lrtstat<-function(w){
+ -2*loglikratio(theta0, w, n)
+}
+statTally(sample=sample, rdata=rsample, FUN=lrtstat, alternative="greater")
+```
+
+\textbf{3.2 Compute confidence interval using likelihood ratio} 
+
+```{r LikInterval}
+# given data
+w <- 8
+n <- 170
+
+# compute log likelihood ratio
+loglikratio <- function(theta, w, nobs){
+  like_null = dbinom(w, size = nobs, prob = theta, log = T)
+  like_alt = dbinom(w, size = nobs, prob = w/nobs, log = T)
+  like_null - like_alt
+}
+
+# compute p-value
+pval <- 1-pchisq(-2*loglikratio(theta0, w, n), df=1)
+
+conf_int <- function(theta, w, nobs){
+  q = qchisq(p=0.95, df=1)
+  -2*loglikratio(theta, w, nobs) - q
+}
+
+# compute 95% CI
+thetaCI <- uniroot.all(f = conf_int, w = 8, nobs = 170, lower = 0, upper = 1)
+psiCI <- (1-2*thetaCI)/(1-thetaCI)
+c(psiCI[2], psiCI[1])
+```
+
+\clearpage
+
+```{r, include=FALSE}
+# find max beta
+var_beta <- function(beta){
+  (0.4118*beta^2/(1-0.4118))/((0.4118*beta/(1-0.4118)+beta)^2*(0.4118*beta/(1-0.4118)+beta+1)) - (1/ 4) * (1 / (43.06 * 2 + 1))
+}
+
+beta_max <- uniroot.all(var_beta, lower = 0, upper = 100)
+```
+
+```{r, include=FALSE}
+# create dataframe
+n <- 170
+x <- 8
+betas <- seq(0.25, beta_max, 0.01)
+alphas <- 0.4118 * betas / (1 - 0.4118)
+variance <- alphas*betas / ((alphas+betas)^2 * (alphas+betas+1))
+
+post_betas <- n - x + betas
+post_alphas <- x + alphas
+
+hdilows <- c()  
+hdiups <- c()
+for (i in seq(1, length(post_betas), by = 1)) {
+  itv = HDInterval::hdi(qbeta, credMass = 0.95, shape1 = post_alphas[i], shape2 = post_betas[i])
+  hdilows <- c(hdilows, tophi(value(itv[2])))
+  hdiups <- c(hdiups, tophi(value(itv[1])))
+}
+
+intervals <- tibble(
+  betas = betas,
+  lowers = tophi(qbeta(0.975, shape1 = post_alphas, shape2 = post_betas)),
+  uppers = tophi(qbeta(0.025, shape1 = post_alphas, shape2 = post_betas)),
+  medians = tophi(qbeta(0.5, shape1 = post_alphas, shape2 = post_betas)),
+  vars = variance,
+  hdilows = hdilows,
+  hdiups = hdiups
+)
+```
+
+
+```{r, echo=FALSE}
+#cols <- c('equal-tailed' = "dodgerblue1", "highest density" = "darksalmon")
+#fills <- c('equal-tailed' = "lightblue", "highest density" = "chocolate2")
+ggplot(data=intervals, aes(x=vars, y=medians)) +
+  geom_ribbon(data = intervals, aes(ymin=lowers, ymax=uppers), color = 'dodgerblue1', fill = 'lightblue', linetype = 5, alpha=0.4) +
+  #geom_ribbon(data = intervals, aes(ymin=hdilows, ymax=hdiups, colour = 'highest density', fill = 'highest density'), linetype = 5, alpha=0.2) +
+  geom_line(data=intervals, aes(x=vars, y=medians)) +
+  ylab('efficacy') +
+  xlab('variance of prior belief') +
+  ggtitle('Efficacy vs Variance of Prior Belief') +
+  theme_bw() +
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"), 
+        axis.text=element_text(size=12), axis.title=element_text(size=14,face="bold"), 
+        legend.position = "none", plot.title = element_text(face="bold")) 
+  #scale_color_manual(name = 'credible intervals', values = cols) + 
+  #scale_fill_manual(name = "credible intervals", values = fills)
+```
+
+```{r}
+psi <- 0.5
+theta <- totheta(psi)
+beta_var <- function(a, b){
+  a*b/((a+b)^2*(a+b+1))
+}
+
+# var = 1/8 
+var = c()
+alpha <- seq(0.384545, 0.384546, 0.000001)
+beta <- seq(0.55167, 0.5517, 0.000001)
+for(i in alpha){
+  for(j in beta) {
+    med = qbeta(0.5, i, j)
+    var = beta_var(i, j)
+    if (abs(med-theta) < 0.000001 & abs(var-1/8) < 0.000001){
+      print(paste(med, var, i, j))
+    }
+  }
+}
+
+#Prior: Beta(0.384545, 0.5517)
+#CI: [0.9059, 0.9775]
+#median: 0.9504
+```
+
+```{r}
+post_beta <- 170 - 8 + 1
+post_alpha <- 8 + 0.6293
+
+# CI
+lower <- tophi(qbeta(0.975, shape1 = post_alpha, shape2 = post_beta))
+upper <- tophi(qbeta(0.025, shape1 = post_alpha, shape2 = post_beta))
+c(lower, upper)
+
+# HDI
+itv <- HDInterval::hdi(qbeta, credMass = 0.95, shape1 = post_alpha, shape2 = post_beta)
+hdilows <- tophi(value(itv[2]))
+hdiups <- tophi(value(itv[1]))
+c(hdilows, hdiups)
+```
+
+```{r}
+psi <- 0.5
+theta <- totheta(psi)
+beta_var <- function(a, b){
+  a*b/((a+b)^2*(a+b+1))
+}
+
+# var = 1/12 
+var = c()
+alpha <- seq(0.701122, 0.701128, 0.0000001)
+beta <- seq(1.132707, 1.132716, 0.0000001)
+for(i in alpha){
+  for(j in beta) {
+    med = qbeta(0.5, i, j)
+    var = beta_var(i, j)
+    if (abs(med-theta) < 0.000000001 & abs(var-1/12) < 0.00000001){
+      print(paste(med, var, i, j))
+    }
+  }
+}
+```
+
+```{r}
+# a=0.701125 b=1.1327115
+post_beta <- 170 - 8 + 1.1327115
+post_alpha <- 8 + 0.701125
+
+# CI
+lower <- tophi(qbeta(0.975, shape1 = post_alpha, shape2 = post_beta))
+upper <- tophi(qbeta(0.025, shape1 = post_alpha, shape2 = post_beta))
+c(lower, upper)
+
+# HDI
+itv <- HDInterval::hdi(qbeta, credMass = 0.95, shape1 = post_alpha, shape2 = post_beta)
+hdilows <- tophi(value(itv[2]))
+hdiups <- tophi(value(itv[1]))
+c(hdilows, hdiups)
+```
+
+
+
+
+
+
+
+
